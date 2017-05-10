@@ -1,0 +1,260 @@
+<!-- Exported using version "7_0_314_6319" on Wednesday, May 10, 2017 3:58:02 PM -->
+<content>
+    <tanium_package>
+        <name>Delete Scheduled Task</name>
+        <display_name>Delete Scheduled Task</display_name>
+        <command_line>cmd.exe &#x2F;c cscript.exe DeleteScheduledTask.vbs ||Scheduled Tasks_Task Name||</command_line>
+        <command_line_timeout>60</command_line_timeout>
+        <download_seconds>600</download_seconds>
+        <hidden_flag>0</hidden_flag>
+        <signature></signature>
+        <verify_expire_seconds>600</verify_expire_seconds>
+        <skip_lock_flag>0</skip_lock_flag>
+        <prompt_text>{&quot;parameters&quot;:[],&quot;model&quot;:&quot;com.tanium.components.parameters::ParametersArray&quot;,&quot;parameterType&quot;:&quot;com.tanium.components.parameters::ParametersArray&quot;}</prompt_text>
+        <package_files>
+            <package_file>
+                <file_name>DeleteScheduledTask.vbs</file_name>
+                <hash>ff1188b0c8d9891bddaf79052bea281d7962980d70d0f9fff69890d4aecd90f4</hash>
+                <source></source>
+                <download_seconds>0</download_seconds>
+                <size>2679</size>
+                <type>0</type>
+            </package_file>
+        </package_files>
+        <meta_data/>
+        <verify_group>
+            <group>
+                <id>0</id>
+            </group>
+        </verify_group>
+    </tanium_package>
+    <sensor>
+        <name>Scheduled Tasks</name>
+        <what_hash>2290646906</what_hash>
+        <category>Incident Response</category>
+        <description>Returns scheduled tasks on a system, created either via &quot;at&quot; or &quot;schtasks&quot;. Intentionally omits time and frequency information to limit unique strings.</description>
+        <result_type>1</result_type>
+        <qseconds>900</qseconds>
+        <ignore_case_flag>1</ignore_case_flag>
+        <exclude_from_parse>1</exclude_from_parse>
+        <delimiter>:|</delimiter>
+        <hidden_flag>0</hidden_flag>
+        <queries>
+            <sensor_query>
+                <sensor_type>4</sensor_type>
+                <os>0</os>
+                <query>&#x27;@INCLUDE=utils&#x2F;file-system-redirect.vbs
+Option Explicit
+
+&#x27;Set blnRecurse to True to recurse Tasks folder
+Dim blnRecurse : blnRecurse = True
+
+&#x27;Set maxrows to cap output
+Dim intMaxRows : intMaxRows = 99
+Dim intRowCount : intRowCount = 0
+
+&#x27;Bail on XP and 2k3 systems
+Dim objWMIService: Set objWMIService = GetObject(&quot;winmgmts:&#x2F;&#x2F;.&#x2F;root&#x2F;cimv2&quot;)
+Dim colOperatingSystems: Set colOperatingSystems = objWMIService.ExecQuery (&quot;Select Caption from Win32_OperatingSystem&quot;)
+Dim objOperatingSystem
+For Each objOperatingSystem in colOperatingSystems
+	If Instr(1,objOperatingSystem.Caption,&quot;XP&quot;) Then
+    WScript.Echo &quot;Windows XP is not supported by this sensor.&quot;
+    WScript.Quit
+  End If
+  If Instr(1,objOperatingSystem.Caption,&quot;2003&quot;) Then
+    WScript.Echo &quot;Windows 2003 is not supported by this sensor.&quot;
+    WScript.Quit
+  End If
+Next
+
+Dim objFSO : Set objFSO = CreateObject(&quot;Scripting.FileSystemObject&quot;)
+Dim strTaskBasePath: strTaskBasePath = objFSO.BuildPath(objFSO.GetSpecialFolder(1),&quot;Tasks&quot;)
+&#x27; Determine if we&#x27;re running in 32bit mode and set path accordingly
+strTaskBasePath = FixFileSystemRedirectionForPath(LCase(strTaskBasePath))
+Dim objFolder : Set objFolder = objFSO.GetFolder(strTaskBasePath)
+
+ProcessTaskFolders(objFolder)
+
+Sub ProcessTaskFolders(objFolder)
+  Dim colFiles : Set colFiles = objFolder.Files
+  Dim objFile
+  For Each objFile In colFiles
+  	ParseTaskFile(objFile.Path)
+    intRowCount = intRowCount + 1
+    If intRowCount &gt; intMaxRows Then
+      WScript.Echo &quot;Max rows exceeded.&quot;
+      WScript.Quit 
+    End If
+  Next
+
+  If blnRecurse = True Then
+    Dim colFolders
+    Set colFolders = objFolder.SubFolders
+    Dim objSubFolder
+    For Each objSubFolder In colFolders
+        ProcessTaskFolders(objSubFolder)
+    Next
+  End If
+End Sub
+
+Function ParseTaskFile(strFile)
+  &#x27;Parse the files and return data
+  Dim XML: Set XML = CreateObject(&quot;Microsoft.XMLDOM&quot;)
+  XML.Async = &quot;False&quot;
+  XML.load(strFile)
+  Dim docElement: Set docElement = XML.documentElement
+  &#x27;Dim colNodes: Set colNodes = docElement.selectNodes(&quot;&#x2F;&#x2F;Task&quot; &amp; &quot;[]&quot;)
+  Dim colNodes: Set colNodes = docElement.SelectSingleNode(&quot;Actions&quot;)
+  Dim strFileName: strFileName = Right(strfile, Len(strfile) - InStrRev(strfile,&quot;\&quot;))
+  WScript.Echo strfileName &amp; &quot;:|&quot; &amp; colNodes.text 
+End Function &#x27;ParseTaskFiles
+&#x27;------------ INCLUDES after this line. Do not edit past this point -----
+&#x27;- Begin file: utils&#x2F;file-system-redirect.vbs
+Function FixFileSystemRedirectionForPath(strFilePath)
+&#x27; This function will fix a folder location so that
+&#x27; a 32-bit program can be passed the windows\system32 directory
+&#x27; as a parameter.
+&#x27; Even if the sensor or action runs in 64-bit mode, a 32-bit
+&#x27; program called in a 64-bit environment cannot access
+&#x27; the system32 directory - it would be redirected to syswow64.
+&#x27; you would not want to do this for 64-bit programs.
+    
+    Dim objFSO, strSystem32Location,objShell
+    Dim strProgramFilesx86,strNewSystem32Location,strRestOfPath
+    Set objFSO = CreateObject(&quot;Scripting.FileSystemObject&quot;)
+    Set objShell = CreateObject(&quot;Wscript.Shell&quot;)
+
+    strProgramFilesx86=objShell.ExpandEnvironmentStrings(&quot;%ProgramFiles%&quot;)
+
+    strFilePath = LCase(strFilePath)
+    strSystem32Location = LCase(objFSO.GetSpecialFolder(1))
+    strProgramFilesx86=objShell.ExpandEnvironmentStrings(&quot;%ProgramFiles(x86)%&quot;)
+    
+    If objFSO.FolderExists(strProgramFilesx86) Then &#x27; quick check for x64
+        If InStr(strFilePath,strSystem32Location) = 1 Then
+            strRestOfPath = Replace(strFilePath,strSystem32Location,&quot;&quot;)
+            strNewSystem32Location = Replace(strSystem32Location,&quot;system32&quot;,&quot;sysnative&quot;)
+            strFilePath = strNewSystem32Location&amp;strRestOfPath
+        End If
+    End If
+    FixFileSystemRedirectionForPath = strFilePath
+    
+    &#x27;Cleanup
+    Set objFSO = Nothing
+End Function &#x27;FixFileSystemRedirectionForPath
+
+Function UnFixFileSystemRedirectionForPath(strFilePath)
+&#x27; This function will undo the changes made to a path by the 
+&#x27; FixFileSystemRedirectionForPath function
+&#x27; if a path is passed in with the sysnative string in it
+&#x27; it will simply change it to system32, regardless of whether
+&#x27; the OS is 64-bit.  A path will only be changed when it&#x27;s
+&#x27; necessary, so this has no effect when it&#x27;s not changed.
+
+    Dim objFSO,strSystem32Location,strNewSystem32Location
+    
+    Set objFSO = CreateObject(&quot;Scripting.FileSystemObject&quot;)
+    
+    strFilePath = LCase(strFilePath)
+    strSystem32Location = LCase(objFSO.GetSpecialFolder(1))
+    strNewSystem32Location = Replace(strSystem32Location,&quot;system32&quot;,&quot;sysnative&quot;)
+    
+    UnFixFileSystemRedirectionForPath = Replace(strFilePath,strNewSystem32Location,strSystem32Location)
+    
+    &#x27;Cleanup
+    Set objFSO = Nothing
+End Function &#x27;UnFixFileSystemRedirectionForPath
+&#x27;- End file: utils&#x2F;file-system-redirect.vbs</query>
+                <signature></signature>
+            </sensor_query>
+            <sensor_query>
+                <sensor_type>6</sensor_type>
+                <os>1</os>
+                <query>#!&#x2F;bin&#x2F;sh
+
+# THIS IS A STUB - NOT INTENDED AS FUNCTIONAL - NA
+# 
+# 
+
+echo &quot;N&#x2F;A on Linux&quot;
+</query>
+                <signature></signature>
+            </sensor_query>
+            <sensor_query>
+                <sensor_type>6</sensor_type>
+                <os>2</os>
+                <query>#!&#x2F;bin&#x2F;sh
+
+# THIS IS A STUB - NOT INTENDED AS FUNCTIONAL - NA
+# 
+# 
+
+echo &quot;N&#x2F;A on Mac&quot;
+</query>
+                <signature></signature>
+            </sensor_query>
+            <sensor_query>
+                <sensor_type>6</sensor_type>
+                <os>3</os>
+                <query>#!&#x2F;bin&#x2F;sh
+
+# THIS IS A STUB - NOT INTENDED AS FUNCTIONAL - NA
+# 
+# 
+
+echo &quot;N&#x2F;A on Solaris&quot;
+</query>
+                <signature></signature>
+            </sensor_query>
+            <sensor_query>
+                <sensor_type>6</sensor_type>
+                <os>4</os>
+                <query>#!&#x2F;bin&#x2F;sh
+
+# THIS IS A STUB - NOT INTENDED AS FUNCTIONAL - NA
+# 
+# 
+
+echo &quot;N&#x2F;A on AIX&quot;
+</query>
+                <signature></signature>
+            </sensor_query>
+        </queries>
+        <columns>
+            <column>
+                <column_index>0</column_index>
+                <name>Task Name</name>
+                <hidden_flag>0</hidden_flag>
+                <result_type>1</result_type>
+                <ignore_case_flag>1</ignore_case_flag>
+                <exclude_from_parse>0</exclude_from_parse>
+            </column>
+            <column>
+                <column_index>1</column_index>
+                <name>Command</name>
+                <hidden_flag>0</hidden_flag>
+                <result_type>1</result_type>
+                <ignore_case_flag>1</ignore_case_flag>
+                <exclude_from_parse>0</exclude_from_parse>
+            </column>
+        </columns>
+        <meta_data>
+            <meta_data_item>
+                <name>IR.evidence_source</name>
+                <value>File System</value>
+                <admin_flag>0</admin_flag>
+            </meta_data_item>
+            <meta_data_item>
+                <name>IR.attack_phase</name>
+                <value>Persistence,Lateral Movement</value>
+                <admin_flag>0</admin_flag>
+            </meta_data_item>
+            <meta_data_item>
+                <name>IR.operating_system</name>
+                <value>Windows</value>
+                <admin_flag>0</admin_flag>
+            </meta_data_item>
+        </meta_data>
+    </sensor>
+</content>
