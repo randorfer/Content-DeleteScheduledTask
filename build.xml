@@ -1,0 +1,23 @@
+<project name="ContentBuild" basedir=".">
+
+    <property name="tools.dir" value="tools" />
+    <property name="tools.zip" value="${tools.dir}/ContentBuildTools.zip" />
+    <property name="tools.unziped.dir" value="tools/TaniumContentBuildTools" />
+
+    <available file="${tools.zip}" property="tools.zip.available" />
+
+    <import file="${tools.unziped.dir}/commonbuild.xml" optional="true"/>
+    
+    <!-- All build targets come from commonbuild.xml - this target is only here for
+         unpacking the tools - see commonbuild.xml for available targets -->
+    
+    <target name="unzip-tools" if="tools.zip.available">
+        <unzip src="${tools.zip}" dest="${tools.dir}" />
+        <chmod perm="+x">
+            <fileset dir="${tools.dir}">
+                <include name="**/*.sh" />
+            </fileset>
+        </chmod>
+    </target>
+
+</project>

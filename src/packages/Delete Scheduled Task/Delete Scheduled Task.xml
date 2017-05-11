@@ -1,0 +1,28 @@
+<tanium_package>
+    <name>Delete Scheduled Task</name>
+    <display_name>Delete Scheduled Task</display_name>
+    <command_line>cmd.exe &#x2F;c cscript.exe DeleteScheduledTask.vbs ||Scheduled Tasks_Task Name||</command_line>
+    <command_line_timeout>60</command_line_timeout>
+    <download_seconds>600</download_seconds>
+    <hidden_flag>0</hidden_flag>
+    <signature></signature>
+    <verify_expire_seconds>600</verify_expire_seconds>
+    <skip_lock_flag>0</skip_lock_flag>
+    <prompt_text>{&quot;parameters&quot;:[],&quot;model&quot;:&quot;com.tanium.components.parameters::ParametersArray&quot;,&quot;parameterType&quot;:&quot;com.tanium.components.parameters::ParametersArray&quot;}</prompt_text>
+    <package_files>
+        <package_file>
+            <file_name>DeleteScheduledTask.vbs</file_name>
+            <hash>8856D9B4E69F872136382C30C58C8423B7C43A71ADF578A5F05464620D7E7E33</hash>
+            <source></source>
+            <download_seconds>0</download_seconds>
+            <size>2130</size>
+            <type>0</type>
+        </package_file>
+    </package_files>
+    <meta_data/>
+    <verify_group>
+        <group>
+            <id>0</id>
+        </group>
+    </verify_group>
+</tanium_package>
