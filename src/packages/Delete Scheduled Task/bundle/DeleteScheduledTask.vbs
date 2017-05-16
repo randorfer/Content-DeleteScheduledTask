@@ -4,78 +4,108 @@
 '========================================
 
 Option Explicit
-dim sName, sCMD,strData
-sName = Wscript.Arguments.Item(0)
+Const BAIL_IF_MORE_THAN_ONE = TRUE
+Const TASK_DIR = "Tasks"
 
-'=======================================
-'Trim and Unescape the sensor parameter
-'=======================================
-strData=Trim(Unescape(sName))
+dim strName, strData
+strName = Wscript.Arguments.Item(0)
+strData=Trim(Unescape(strName))
 
-'=======================================
-'Define the SCHTASKS command line to
-'execute
-'=======================================
-sCMD = "cmd.exe /c schtasks /DELETE /TN """ & strData & """ /F"
+dim objShell
+Set objShell = CreateObject("wscript.shell")
 
-''=======================================
-'debugging output to ensure the parameter 
-'is passed correctly
-wscript.echo "Executing: " & sCMD
-''=======================================
-dim oShell
-Set oShell = CreateObject("wscript.shell")
-oShell.Run sCMD,0,FALSE
+'ssfSYSTEM32 = 0x25
+dim strSystemRoot
+strSystemRoot = CreateObject("Shell.Application").Namespace(&H25).Self.Path
 
-Wscript.Quit
+dim objFSO, strDir
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+strDir = strSystemRoot & "\" & TASK_DIR
 
 
+If objFSO.FolderExists(strDir) Then
+	dim strTasks
+	strTasks = FindFile(strData,objFSO.GetFolder(strDir))
+	If Len(strTasks) > 0 Then
+		If InStr(1, strTasks, ",",1) Then
+			'========================================
+            'Quit the script if we find more than one 
+            'scheduled task with the same name
+            'leverages the BAIL_IF_MORE_THAN_ONE 
+            'constant variable
+            '========================================
 
-Const startDir = "Tasks"
-Const fileName = "acrobat.exe"
-'ssfPROGRAMFILES = 0x26
-programFiles = CreateObject("Shell.Application").Namespace(&H26).Self.Path
-Set fso = CreateObject("Scripting.FileSystemObject")
-dir = programFiles & "\" & startDir
-
-If fso.FolderExists(dir) Then _
-  file = FindFile(LCase(fileName), fso.GetFolder(dir))
-If Len(file) = 0 Then
-  WScript.Echo "Error: File Not Found"
-  WScript.Quit 2
+            
+            If BAIL_IF_MORE_THAN_ONE Then
+				wscript.echo "Found multiple tasks with name of """ & strData & """ - bailing" 
+				wscript.quit
+			Else
+				dim arrTask
+				arrTask = Split(strTasks,",")
+				dim i
+				For i=0 To UBound(arrTask)
+					'wscript.echo arrTask(i)  & " | " & TrimForSchtasks(arrTask(i))
+					DeleteTask (TrimForSchtasks(arrTask(i)))
+				Next
+			End If
+		Else
+			'wscript.echo strTasks & " | " & TrimForSchtasks(strTasks)
+			DeleteTask (TrimForSchtasks(strTasks))
+		End If
+	End If	
 End If
-Set folder = fso.GetFolder(file & "\..\..")
-WScript.Echo folder.Name & ": " & folder
 
 
 WScript.Quit
-Function FindFile(ByRef sName, ByRef oFolder) 'As String
-  FindFile = ""
-  For Each file In oFolder.Files
-    If LCase(file.Name) = sName Then
-      FindFile = file
-      Exit Function
-    End If
-  Next 'file
-  For Each dir In oFolder.SubFolders
-    FindFile = FindFile(sName, dir)
-    If Len(FindFile) Then _
-      Exit Function
-  Next 'dir
+
+Sub DeleteTask (strTaskName)
+
+	dim strCMD
+	strCMD = "cmd.exe /c schtasks /DELETE /TN """ & strTaskName & """ /F"
+
+	wscript.echo "Executing: " & strCMD
+	objShell.Run strCMD,0,FALSE	
+
+End Sub
+
+
+Function TrimForSchtasks(strJob)
+
+	Dim strPath
+	strPath = objFSO.GetAbsolutePathName(strJob)
+	
+	dim arrPath
+	arrPath = Split(strPath,"Tasks")
+	
+	TrimForSchtasks = arrPath(Ubound(arrPath))
+
 End Function
 
-strComputer = “.”
 
-Set objWMIService = GetObject(“winmgmts:\\” & strComputer & “\root\cimv2”)
-
-
-Set colFiles = objWMIService.ExecQuery _
-
-    (“Select * From CIM_DataFile Where FileName = ‘Some Task3’ and Path LIKE ‘\\TASKS\\'”)
-
-
-For Each objFile in colFiles
-
-    Wscript.Echo objFile.Name
-
-Next
+Function FindFile(strName,objFolder) 'As String
+  dim strRet : strRet = ""
+  
+  FindFile = ""
+  dim objFile
+  For Each objfile In objFolder.Files
+    If LCase(objfile.Name) = strName Then
+      strRet = LCase(objfile.Path)
+    End If
+  Next 'file
+  
+  dim objDir
+  For Each objDir In objFolder.SubFolders
+	dim strFuncRet : strFuncRet = ""
+	strFuncRet = FindFile(strName, objDir)
+    If Len(strFuncRet) Then
+		If strRet = "" Then
+			strRet = strFuncRet
+		Else
+			strRet = strRet & "," & strFuncRet
+		End If
+	End If
+  Next 'dir
+  
+  FindFile = strRet
+  
+End Function
