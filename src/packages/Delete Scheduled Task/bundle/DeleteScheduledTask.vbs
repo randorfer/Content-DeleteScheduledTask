@@ -2,61 +2,66 @@
 'Package VBScript to call SCHTASK /DELETE 
 'leveraging a sensor parameter
 '========================================
+OPTION EXPLICIT
 
-Option Explicit
-Const BAIL_IF_MORE_THAN_ONE = TRUE
-Const TASK_DIR = "Tasks"
+'Controls logic on how we handle duplicate
+'task names
+const SKIP_DUPS = TRUE
 
 dim strName, strData
 strName = Wscript.Arguments.Item(0)
-strData=Trim(Unescape(strName))
+strData=UCASE(Trim(Unescape(strName)))
+wscript.echo "Scheduled TaskName passed: " &strData
 
 dim objShell
-Set objShell = CreateObject("wscript.shell")
+Set objShell = CreateObject("WScript.Shell")
 
-'ssfSYSTEM32 = 0x25
-dim strSystemRoot
-strSystemRoot = CreateObject("Shell.Application").Namespace(&H25).Self.Path
+dim objExec
+Set objExec = objShell.Exec("schtasks /query /FO list")
 
-dim objFSO, strDir
-Set objFSO = CreateObject("Scripting.FileSystemObject")
-strDir = strSystemRoot & "\" & TASK_DIR
+dim dictTasks
+Set dictTasks = CreateObject("Scripting.Dictionary")
+
+dim strLine
+Do Until objExec.StdOut.AtEndOfStream
+ strLine = UCASE(objExec.StdOut.ReadLine)
+ If InStr(strLine, strData) Then
+    
+    strLine = trim(replace(strLine,"TASKNAME:",""))
+
+    If dictTasks.Exists(strLine) Then
+        'wscript.echo strLine & " is already in the dictionary"
+    Else
+        'wscript.echo strLine & " will be added to dictionary"
+        dictTasks.Add strLine, strLine
+    End If
+ End If
+Loop
 
 
-If objFSO.FolderExists(strDir) Then
-	dim strTasks
-	strTasks = FindFile(strData,objFSO.GetFolder(strDir))
-	If Len(strTasks) > 0 Then
-		If InStr(1, strTasks, ",",1) Then
-			'========================================
-            'Quit the script if we find more than one 
-            'scheduled task with the same name
-            'leverages the BAIL_IF_MORE_THAN_ONE 
-            'constant variable
-            '========================================
+dim intCount : intCount = 0
 
-            
-            If BAIL_IF_MORE_THAN_ONE Then
-				wscript.echo "Found multiple tasks with name of """ & strData & """ - bailing" 
-				wscript.quit
-			Else
-				dim arrTask
-				arrTask = Split(strTasks,",")
-				dim i
-				For i=0 To UBound(arrTask)
-					'wscript.echo arrTask(i)  & " | " & TrimForSchtasks(arrTask(i))
-					DeleteTask (TrimForSchtasks(arrTask(i)))
-				Next
-			End If
-		Else
-			'wscript.echo strTasks & " | " & TrimForSchtasks(strTasks)
-			DeleteTask (TrimForSchtasks(strTasks))
-		End If
-	End If	
+dim colKeys,strKey
+colKeys = dictTasks.Keys
+For Each strKey in colKeys
+    If InStr(strKey, strData) Then
+	intCount = intCount + 1
+    End If
+Next
+
+If intCount > 1 and SKIP_DUPS Then
+	wscript.echo "*** Manual remediation is required ***"
+	wscript.echo
+	wscript.echo strData & " was found " & intCount & " time(s)."
+	wscript.echo "Alternatively, You can modify the package script to allow duplicate deletion."
+Else
+    For Each strKey in colKeys
+       If InStr(strKey, strData) Then
+	  wscript.echo "Deleting " & strKey
+	  DeleteTask(strKey)
+       End If
+    Next
 End If
-
-
-WScript.Quit
 
 Sub DeleteTask (strTaskName)
 
@@ -67,45 +72,3 @@ Sub DeleteTask (strTaskName)
 	objShell.Run strCMD,0,FALSE	
 
 End Sub
-
-
-Function TrimForSchtasks(strJob)
-
-	Dim strPath
-	strPath = objFSO.GetAbsolutePathName(strJob)
-	
-	dim arrPath
-	arrPath = Split(strPath,"Tasks")
-	
-	TrimForSchtasks = arrPath(Ubound(arrPath))
-
-End Function
-
-
-Function FindFile(strName,objFolder) 'As String
-  dim strRet : strRet = ""
-  
-  FindFile = ""
-  dim objFile
-  For Each objfile In objFolder.Files
-    If LCase(objfile.Name) = strName Then
-      strRet = LCase(objfile.Path)
-    End If
-  Next 'file
-  
-  dim objDir
-  For Each objDir In objFolder.SubFolders
-	dim strFuncRet : strFuncRet = ""
-	strFuncRet = FindFile(strName, objDir)
-    If Len(strFuncRet) Then
-		If strRet = "" Then
-			strRet = strFuncRet
-		Else
-			strRet = strRet & "," & strFuncRet
-		End If
-	End If
-  Next 'dir
-  
-  FindFile = strRet
-  
-End Function
